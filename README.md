@@ -9,7 +9,8 @@ framework, no build step, no JavaScript of our own.
 .
 ├── README.md
 └── public/                  ← Cloudflare Pages output directory
-    ├── index.html           ← the entire site (markup + inline <style>)
+    ├── index.html           ← the site (markup + inline <style>)
+    ├── 404.html             ← not-found page, picked up by Pages automatically
     ├── _headers             ← Cloudflare Pages security headers + CSP
     ├── robots.txt           ← allow all, points at the sitemap
     ├── sitemap.xml          ← single URL
@@ -50,6 +51,11 @@ and `https://fonts.gstatic.com` to `font-src` in `public/_headers`.
 
 `favicon.svg` is full-bleed for legibility at 16px; `apple-touch-icon.png` is
 inset ~14% so iOS's rounded mask can't clip the letterform.
+
+Because there is no build step, `404.html` carries its own trimmed copy of the
+same custom properties rather than sharing a stylesheet — **if you change a
+brand color, change it in both files.** Two pages is under the threshold where
+a shared `style.css` would earn the extra request; a third page would not be.
 
 ## Security headers
 
