@@ -8,10 +8,11 @@ framework, no build step, no JavaScript of our own.
 ```
 .
 ├── README.md
-└── public/                  ← Cloudflare Pages output directory
+├── wrangler.jsonc           ← Worker name + static-asset settings
+└── public/                  ← the static assets directory
     ├── index.html           ← the site (markup + inline <style>)
-    ├── 404.html             ← not-found page, picked up by Pages automatically
-    ├── _headers             ← Cloudflare Pages security headers + CSP
+    ├── 404.html             ← served on unmatched paths (see not_found_handling)
+    ├── _headers             ← security headers + CSP
     ├── robots.txt           ← allow all, points at the sitemap
     ├── sitemap.xml          ← single URL
     ├── favicon.svg          ← "A" in dark grey on burnt orange
@@ -26,8 +27,8 @@ Everything served lives in `public/`. There is nothing to compile — open
 python3 -m http.server 8080 --directory public
 ```
 
-(`_headers` is a Cloudflare Pages feature and is ignored by a local server, so
-test CSP against a real Pages deploy or a preview URL.)
+(`_headers` is a Cloudflare feature and is ignored by a local server, so test
+the CSP against a real deploy.)
 
 ## Design notes
 
@@ -70,51 +71,70 @@ object-src 'none'; upgrade-insecure-requests
 ```
 
 - `style-src 'unsafe-inline'` is required by the inline `<style>` block.
-- `script-src 'self'` exists only so Cloudflare's **Email Address
-  Obfuscation** can load its same-origin `/cdn-cgi/` decode script. The page
-  ships no JavaScript of its own. Mailto links are written normally in the
-  HTML; Cloudflare rewrites them at the edge.
+- `script-src 'self'` was originally included so Cloudflare's **Email Address
+  Obfuscation** could load its same-origin `/cdn-cgi/` decode script. That
+  feature does not apply to content served by a Worker, so it never fires here
+  and the mailto addresses are served in plain text. The page ships no
+  JavaScript of its own, so `script-src` can safely be tightened to `'none'`
+  if the site stays on Workers — see "Email obfuscation" below.
 - Turning on Rocket Loader or Cloudflare Web Analytics would inject scripts
   from `ajax.cloudflare.com` / `static.cloudflareinsights.com` and require
   widening `script-src` (and adding `connect-src`).
 
 ## Deploy
 
-### Cloudflare Pages, from Git
+This site is deployed as a **Worker with static assets**, not as a Cloudflare
+Pages project. The two are configured differently — Pages infers behavior from
+the files present, Workers requires `wrangler.jsonc`.
 
-Workers & Pages → Create → Pages → Connect to Git, pick this repo, then:
+### From Git
 
-| Setting | Value |
-| --- | --- |
-| Production branch | `main` |
-| Framework preset | None |
-| Build command | *(leave empty)* |
-| Build output directory | `public` |
-| Root directory | `/` |
+The Worker is connected to this repo via Workers Builds; pushing to `main`
+builds and deploys. There is no build command — `wrangler.jsonc` points at
+`public/` and the assets are uploaded as-is.
 
-Every push to `main` publishes; other branches get preview URLs.
+`name` in `wrangler.jsonc` must match the existing Worker (`agni`). A
+mismatched name creates a second Worker instead of updating this one.
 
-### Direct deploy with Wrangler
+### Direct deploy
 
 ```sh
-npx wrangler pages deploy public --project-name=agni-advisors --branch=main
+npx wrangler deploy
+```
+
+(Not `wrangler pages deploy` — that targets a Pages project, which this is not.)
+
+### not_found_handling
+
+```jsonc
+"not_found_handling": "404-page"
+```
+
+This is required for `public/404.html` to be served on unmatched paths. The
+default is `"none"`, which returns a bodiless 404 and leaves the 404 page
+reachable only at its own URL. Verify after deploy:
+
+```sh
+curl -sI https://agniadvisors.com/nope | head -1   # expect: HTTP/2 404
+curl -s  https://agniadvisors.com/nope | head -1   # expect: <!DOCTYPE html>
 ```
 
 ### Custom domain
 
-Pages project → **Custom domains** → **Set up a domain** → `agniadvisors.com`,
-then repeat for `www.agniadvisors.com`. If the zone is already on Cloudflare
-the records are created automatically; otherwise follow the CNAME instructions
-shown. Add a redirect rule if you want `www` to fold into the apex.
+Worker → **Settings** → **Domains & Routes** → add `agniadvisors.com`. If the
+zone is already on Cloudflare the records are created for you. Add a redirect
+rule if you want `www` to fold into the apex.
 
-### Email Address Obfuscation
+### Email obfuscation
 
-The Cloudflare dashboard setting only applies to traffic on the proxied custom
-domain (not `*.pages.dev`). Select the `agniadvisors.com` zone → **Scrape
-Shield** → toggle **Email Address Obfuscation** on. Verify with:
+**Not available on this deployment.** Scrape Shield's Email Address
+Obfuscation does not rewrite content served by a Worker, so toggling it in the
+dashboard has no effect here and `analysts@agniadvisors.com` is served as
+plain text in the HTML. Confirm with:
 
 ```sh
-curl -s https://agniadvisors.com/ | grep -c '__cf_email__'
+curl -s https://agniadvisors.com/ | grep -o 'mailto:[^"]*'
 ```
 
-A non-zero count means the addresses are being rewritten at the edge.
+If harvesting becomes a problem the options are a contact form, a Cloudflare
+Email Routing alias that can be rotated, or moving the site to Pages.

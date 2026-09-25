@@ -1,0 +1,12 @@
+{
+  // This site deploys as a Worker with static assets (not Cloudflare Pages).
+  // `name` must match the existing Worker, or a push creates a second one.
+  "name": "agni",
+  "compatibility_date": "2026-09-24",
+  "assets": {
+    "directory": "./public",
+    // Without this, unmatched paths return a bodiless 404 and public/404.html
+    // is only reachable at its own URL. Default is "none".
+    "not_found_handling": "404-page"
+  }
+}
