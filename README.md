@@ -1,7 +1,8 @@
 # Agni Advisors — agniadvisors.com
 
 Single-page static placeholder site for Agni Advisors. Plain HTML + CSS, no
-framework, no build step, no JavaScript of our own.
+framework, no build step. The only JavaScript is `email.js`, which assembles
+the contact address (see "Email obfuscation").
 
 ## Structure
 
@@ -13,6 +14,7 @@ framework, no build step, no JavaScript of our own.
     ├── index.html           ← the site (markup + inline <style>)
     ├── 404.html             ← served on unmatched paths (see not_found_handling)
     ├── _headers             ← security headers + CSP
+    ├── email.js             ← builds mailto links from data attributes
     ├── robots.txt           ← allow all, points at the sitemap
     ├── sitemap.xml          ← single URL
     ├── favicon.svg          ← "A" in dark grey on burnt orange
@@ -65,18 +67,14 @@ a shared `style.css` would earn the extra request; a third page would not be.
 `Cross-Origin-Opener-Policy` and this CSP:
 
 ```
-default-src 'none'; script-src 'none'; style-src 'self' 'unsafe-inline';
+default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline';
 img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
 object-src 'none'; upgrade-insecure-requests
 ```
 
 - `style-src 'unsafe-inline'` is required by the inline `<style>` block.
-- `script-src 'none'` — the page ships no JavaScript at all. This was
-  originally `'self'` to let Cloudflare's **Email Address Obfuscation** load
-  its same-origin `/cdn-cgi/` decode script, but that feature does not apply
-  to Worker-served content, so the script can never load. Serving the mailto
-  addresses in plain text is an accepted tradeoff; see "Email obfuscation".
-  Restore `'self'` if the site ever moves to Pages.
+- `script-src 'self'` — allows `/email.js` and nothing else. There are no
+  inline scripts; keep it that way rather than adding `'unsafe-inline'`.
 - Turning on Rocket Loader or Cloudflare Web Analytics would inject scripts
   from `ajax.cloudflare.com` / `static.cloudflareinsights.com` and require
   widening `script-src` (and adding `connect-src`).
@@ -127,14 +125,20 @@ rule if you want `www` to fold into the apex.
 
 ### Email obfuscation
 
-**Not available on this deployment.** Scrape Shield's Email Address
-Obfuscation does not rewrite content served by a Worker, so toggling it in the
-dashboard has no effect here and `analysts@agniadvisors.com` is served as
-plain text in the HTML. Confirm with:
+Scrape Shield's Email Address Obfuscation does not rewrite content served by
+a Worker, so the site does its own. The address never appears in the HTML;
+each contact link is a placeholder:
 
-```sh
-curl -s https://agniadvisors.com/ | grep -o 'mailto:[^"]*'
+```html
+<a data-u="analysts" data-d="agniadvisors.com" data-q="?subject=..."></a>
+<noscript>analysts [at] agniadvisors [dot] com</noscript>
 ```
 
-If harvesting becomes a problem the options are a contact form, a Cloudflare
-Email Routing alias that can be rotated, or moving the site to Pages.
+`public/email.js` (loaded with `defer`) joins `data-u` and `data-d`, sets the
+`mailto:` href (appending `data-q` if present), and fills in the address as
+link text when the link is empty. Links with their own text keep it. Confirm
+after deploy:
+
+```sh
+curl -s https://agniadvisors.com/ | grep -c "analysts@agniadvisors.com"   # expect: 0
+```
