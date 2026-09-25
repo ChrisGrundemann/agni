@@ -65,18 +65,18 @@ a shared `style.css` would earn the extra request; a third page would not be.
 `Cross-Origin-Opener-Policy` and this CSP:
 
 ```
-default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline';
+default-src 'none'; script-src 'none'; style-src 'self' 'unsafe-inline';
 img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
 object-src 'none'; upgrade-insecure-requests
 ```
 
 - `style-src 'unsafe-inline'` is required by the inline `<style>` block.
-- `script-src 'self'` was originally included so Cloudflare's **Email Address
-  Obfuscation** could load its same-origin `/cdn-cgi/` decode script. That
-  feature does not apply to content served by a Worker, so it never fires here
-  and the mailto addresses are served in plain text. The page ships no
-  JavaScript of its own, so `script-src` can safely be tightened to `'none'`
-  if the site stays on Workers — see "Email obfuscation" below.
+- `script-src 'none'` — the page ships no JavaScript at all. This was
+  originally `'self'` to let Cloudflare's **Email Address Obfuscation** load
+  its same-origin `/cdn-cgi/` decode script, but that feature does not apply
+  to Worker-served content, so the script can never load. Serving the mailto
+  addresses in plain text is an accepted tradeoff; see "Email obfuscation".
+  Restore `'self'` if the site ever moves to Pages.
 - Turning on Rocket Loader or Cloudflare Web Analytics would inject scripts
   from `ajax.cloudflare.com` / `static.cloudflareinsights.com` and require
   widening `script-src` (and adding `connect-src`).
